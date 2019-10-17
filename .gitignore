@@ -4,3 +4,6 @@
 mitp1.py
 videomaker.py
 *.mp3
+shiki.py
+ghostdriver.log
+/phantomjs-2.1.1-windows

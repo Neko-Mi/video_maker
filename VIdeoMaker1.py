@@ -14,7 +14,6 @@ import moviepy.editor as mpe
 from moviepy.video.tools.segmenting import findObjects
 from gtts import gTTS
 
-
 def download_youtube_video(video_url, name, path='./'):
     """Скачивает видео с ютуба по ссылке."""
     yt = YouTube(video_url)
@@ -41,7 +40,8 @@ def get_page_data(soup):
 
 def get_synopsis(soup):
     """Парсером получает описние."""
-    synopsis = soup.find(itemprop="description").text
+    synopsis = soup.find(itemprop="description").text \
+        .replace('[Written by MAL Rewrite]', '')
     return synopsis
 
 
@@ -68,7 +68,7 @@ def get_genre(soup):
 
 def get_studios(soup):
     """Достает студии."""
-    studios = soup.find('td').find('div').find('span', text='Studios:') \
+    studios = soup.find('td').find('div').find('span', text='Studios:')\
         .findParent().find_all('a')
     studios_txt = 'Studios: '
 
@@ -82,66 +82,88 @@ def get_studios(soup):
 
 
 def get_source(soup):
-    return soup.find('td').find('div').find('span', text='Source:') \
+    source = soup.find('td').find('div').find('span', text='Source:') \
         .findParent().text.replace('\n', '').replace('  ', ' ')
+    return source
 
 
 def set_information(soup, region, duration_):
     text = get_title(soup) + '\n' + get_genre(soup) + '\n' \
            + get_studios(soup) + '\n' + get_source(soup)
-
-    return mpe.TextClip(text, fontsize=24, color='white',
-                        size=(region.size[0] - 100,
-                              region.size[1] - 100), method='caption',
-                        align='West') \
+    information = mpe.TextClip(text, fontsize=24, color='white',
+                               size=(region.size[0] - 100,
+                                     region.size[1] - 100),
+                               method='caption',
+                               align='West') \
         .set_duration(duration_).set_pos((region.screenpos[0] + 50,
                                           region.screenpos[1]))
+
+    return information
 
 
 def set_synopsis(soup, region, duration_):
     text = 'SYNOPSIS' + '\n' + get_synopsis(soup)
-    return mpe.TextClip(text, fontsize=24,
-                        color='white', size=region.size,
-                        method='caption', align='North') \
+    synopsis = mpe.TextClip(text, fontsize=24,
+                            color='white', size=region.size,
+                            method='caption', align='North') \
         .set_duration(duration_).set_pos(region.screenpos)
+    return synopsis
 
 
 def set_background(background, duration_):
-    return mpe.ImageClip(background).set_opacity(0.4) \
+    bg = mpe.ImageClip(background).set_opacity(0.4) \
         .set_duration(duration_)
+    return bg
+
+
+def anime_preview(video, title):
+    title = "Top 1 in 2019 year\n" + title
+    tts = gTTS(title, lang='en')
+    tts.save('title.mp3')
+    audio = mpe.AudioFileClip('title.mp3')
+
+
+    time = audio.duration
+    preview_video = video.subclip(0, time).resize((1920, 1080))\
+        .set_opacity(0.4).volumex(0.2)
+    # .resize(region.size) \
+    #     .set_pos(region.screenpos)
+    name = mpe.TextClip(title, fontsize=72, color='white',
+                        size=preview_video.size,
+                        method='caption',
+                        align='center').set_duration(time)
+
+    name = name.set_audio(audio)
+
+    preview = mpe.CompositeVideoClip([preview_video, name])
+    return preview
 
 
 def make_video(soup, regions):
     """Создает массив видеоклипов из html-страницы."""
-    video = [0] * 4
+    video = [0] * 5
 
     background = 'BG.jpg'
 
-    video[2] = mpe.VideoFileClip(get_page_data(soup)).subclip(15, 45) \
-        .resize(regions[2].size).set_mask(regions[2].mask) \
-        .set_pos(regions[2].screenpos).volumex(0.2)
+    video[2] = mpe.VideoFileClip(get_page_data(soup)).subclip(15, 45)
 
+    title = soup.find('title').text.replace('\n', '') \
+        .replace(' - MyAnimeList.net', '')
+
+
+    video[4] = anime_preview(video[2], title)
+    time = video[4].duration
+
+
+    video[2] = video[2].subclip(time, ).resize(regions[2].size)\
+        .set_pos(regions[2].screenpos).set_mask(regions[2].mask)
     print('Видео скачано')
     duration_ = video[2].duration
-
-
-    #доделать текст в речь
-    gTTS(get_synopsis(soup)).save('synopsis.mp3')
-    print('Записана речь')
-
-    audio = mpe.AudioFileClip('synopsis.mp3')
-    audio.write_audiofile('syn.mp3', ffmpeg_params=['-filter:a',
-                                                    'atempo=1.25'])
-
-    newaudio = mpe.AudioFileClip('syn.mp3').subclip(0, 30).volumex(2)
-
-
-
 
     video[0] = set_background(background, duration_) \
         .resize(regions[0].size).set_pos(regions[0].screenpos)
     video[1] = set_information(soup, regions[1], duration_)
-    video[3] = set_synopsis(soup, regions[3], duration_).set_audio(newaudio)
+    video[3] = set_synopsis(soup, regions[3], duration_)
 
     print('Создан массив видео')
 
@@ -160,11 +182,21 @@ def compose_video(url):
 
     video = make_video(soup, regions)
 
+    final_video = mpe.CompositeVideoClip([video[0], video[1],
+                                          video[2], video[3]])
+    final_video.write_videofile('video.mp4')
+    print('Создано video.mp4')
+    vid = mpe.VideoFileClip('video.mp4')
 
+    video[4].write_videofile('preview.mp4')
+    print('Создано preview.mp4')
+    prev = mpe.VideoFileClip('preview.mp4')
 
-    final_video = mpe.CompositeVideoClip(video)
+    # vi = mpe.CompositeVideoClip([video[4]])
+    concat = mpe.concatenate_videoclips([prev, vid])
+    # compo = mpe.CompositeVideoClip(concat)
     # final_video = final_video.set_audio(newaudio)
-    final_video.write_videofile("composition.mp4")
+    concat.write_videofile("composition.mp4")
 
 
 compose_video('https://myanimelist.net/anime/37521/')
