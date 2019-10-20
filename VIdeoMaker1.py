@@ -14,6 +14,7 @@ import moviepy.editor as mpe
 from moviepy.video.tools.segmenting import findObjects
 from gtts import gTTS
 
+
 def download_youtube_video(video_url, name, path='./'):
     """Скачивает видео с ютуба по ссылке."""
     yt = YouTube(video_url)
@@ -32,7 +33,8 @@ def get_html(url):
 
 def get_page_data(soup):
     """Парсером получает ссылку на ютуб и название для видео."""
-    name = soup.find('title').text.split(' ', 1)[0].replace('\n', '')
+    name = soup.find('title').text.split(' ', 1)[0].replace('\n', '')\
+        .replace('.', '')
     link = soup.find('a', 'video-unit').get('href')
     download_youtube_video(link, name)
     return name + ".mp4"
@@ -68,7 +70,7 @@ def get_genre(soup):
 
 def get_studios(soup):
     """Достает студии."""
-    studios = soup.find('td').find('div').find('span', text='Studios:')\
+    studios = soup.find('td').find('div').find('span', text='Studios:') \
         .findParent().find_all('a')
     studios_txt = 'Studios: '
 
@@ -82,12 +84,14 @@ def get_studios(soup):
 
 
 def get_source(soup):
+    """Достает источники."""
     source = soup.find('td').find('div').find('span', text='Source:') \
         .findParent().text.replace('\n', '').replace('  ', ' ')
     return source
 
 
 def set_information(soup, region, duration_):
+    """Создает клип с инфой."""
     text = get_title(soup) + '\n' + get_genre(soup) + '\n' \
            + get_studios(soup) + '\n' + get_source(soup)
     information = mpe.TextClip(text, fontsize=24, color='white',
@@ -102,6 +106,7 @@ def set_information(soup, region, duration_):
 
 
 def set_synopsis(soup, region, duration_):
+    """Создает клип описания."""
     text = 'SYNOPSIS' + '\n' + get_synopsis(soup)
     synopsis = mpe.TextClip(text, fontsize=24,
                             color='white', size=region.size,
@@ -117,14 +122,14 @@ def set_background(background, duration_):
 
 
 def anime_preview(video, title):
-    title = "Top 1 in 2019 year\n" + title
+    """Создает превью для каждого места."""
+    # title = "Top 1 in 2019 year\n" + title
     tts = gTTS(title, lang='en')
     tts.save('title.mp3')
     audio = mpe.AudioFileClip('title.mp3')
 
-
     time = audio.duration
-    preview_video = video.subclip(0, time).resize((1920, 1080))\
+    preview_video = video.subclip(0, time).resize((1920, 1080)) \
         .set_opacity(0.4).volumex(0.2)
     # .resize(region.size) \
     #     .set_pos(region.screenpos)
@@ -139,7 +144,30 @@ def anime_preview(video, title):
     return preview
 
 
-def make_video(soup, regions):
+def video_preview(video, title, time):
+    """Создает превью для каждого места."""
+    # title = "Top 1 in 2019 year\n" + title
+    tts = gTTS(title, lang='en')
+    tts.save('title.mp3')
+    audio = mpe.AudioFileClip('title.mp3')
+
+    # time = audio.duration
+    preview_video = video.subclip(0, time).resize((1920, 1080)) \
+        .set_opacity(0.4).volumex(0.2)
+    # .resize(region.size) \
+    #     .set_pos(region.screenpos)
+    name = mpe.TextClip(title, fontsize=72, color='white',
+                        size=preview_video.size,
+                        method='caption',
+                        align='center').set_duration(time)
+
+    name = name.set_audio(audio)
+
+    preview = mpe.CompositeVideoClip([preview_video, name])
+    return preview
+
+
+def make_video(soup, regions, place):
     """Создает массив видеоклипов из html-страницы."""
     video = [0] * 5
 
@@ -150,12 +178,11 @@ def make_video(soup, regions):
     title = soup.find('title').text.replace('\n', '') \
         .replace(' - MyAnimeList.net', '')
 
-
-    video[4] = anime_preview(video[2], title)
+    text = 'Top ' + place + '\n' + title
+    video[4] = anime_preview(video[2], text)
     time = video[4].duration
 
-
-    video[2] = video[2].subclip(time, ).resize(regions[2].size)\
+    video[2] = video[2].subclip(time, ).resize(regions[2].size) \
         .set_pos(regions[2].screenpos).set_mask(regions[2].mask)
     print('Видео скачано')
     duration_ = video[2].duration
@@ -170,17 +197,13 @@ def make_video(soup, regions):
     return video
 
 
-def compose_video(url):
+def compose_video(url, regions, place):
     """Собирает видео."""
     html = get_html(url)
     soup = BeautifulSoup(html, 'lxml')
     print('Получен html')
 
-    # Загрузка изображения для деления на части
-    im = mpe.ImageClip('Form1.png')
-    regions = findObjects(im)
-
-    video = make_video(soup, regions)
+    video = make_video(soup, regions, place)
 
     final_video = mpe.CompositeVideoClip([video[0], video[1],
                                           video[2], video[3]])
@@ -192,11 +215,46 @@ def compose_video(url):
     print('Создано preview.mp4')
     prev = mpe.VideoFileClip('preview.mp4')
 
-    # vi = mpe.CompositeVideoClip([video[4]])
     concat = mpe.concatenate_videoclips([prev, vid])
-    # compo = mpe.CompositeVideoClip(concat)
-    # final_video = final_video.set_audio(newaudio)
-    concat.write_videofile("composition.mp4")
+    name = place + '.mp4'
+    concat.write_videofile(name)
 
 
-compose_video('https://myanimelist.net/anime/37521/')
+def create_video(url, video_name):
+    # Загрузка изображения для деления на части
+    im = mpe.ImageClip('Form1.png')
+    regions = findObjects(im)
+
+    last = len(url)
+    clips = [0] * (last + 1)
+
+
+    for temp, anime in enumerate(url):
+        place = temp + 1
+        name = str(place)
+        compose_video(anime, regions, name)
+        clips[last - temp] = mpe.VideoFileClip(name + '.mp4')
+
+
+    background = 'BG.jpg'
+    duration_ = 5
+    audio_clip = clips[last]
+    audio = audio_clip.subclip(4, duration_).audio
+    bg = set_background(background, duration_) \
+        .resize(regions[0].size).set_pos(regions[0].screenpos)\
+        .set_audio(audio)
+
+    clips[0] = video_preview(bg, video_name, duration_)
+
+
+    concat = mpe.concatenate_videoclips(clips)
+    concat.write_videofile('full.mp4')
+
+
+# compose_video('https://myanimelist.net/anime/37521/')
+
+create_video(['https://myanimelist.net/anime/37521/',
+              'https://myanimelist.net/anime/38691/Dr_Stone'],
+             'Top Anime'
+
+             )
