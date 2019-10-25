@@ -7,12 +7,23 @@
 
 import os
 import requests
+import time
 
 from pytube import YouTube
 from bs4 import BeautifulSoup
 import moviepy.editor as mpe
 from moviepy.video.tools.segmenting import findObjects
 from gtts import gTTS
+
+# PARAMS = ['-vcodec', 'h264_qsv', '-movflags', 'faststart'] 751s 8.4mb
+# PARAMS = ['-vcodec', 'nvenc', '-movflags', 'faststart'] 697s 8.4mb
+# PARAMS = ['-preset', 'ultrafast', '-movflags', 'faststart'] 757s 45.7mb
+# PARAMS = [] 827s 15.9mb
+# PARAMS = ['-movflags', 'faststart'] 835s 15.9mb
+# PARAMS = ['-vcodec', 'h264_qsv'] 791s 15.9mb
+# PARAMS = ['-vcodec', 'nvenc'] 725s 17.4mb
+# PARAMS = ['-vcodec', 'nvenc', '-movflags', 'faststart'] 735s 17.4mb
+PARAMS = ['-vcodec', 'nvenc', '-movflags', 'faststart']
 
 
 def download_youtube_video(video_url, name, path='./'):
@@ -207,21 +218,22 @@ def compose_video(url, regions, place):
 
     final_video = mpe.CompositeVideoClip([video[0], video[1],
                                           video[2], video[3]])
-    final_video.write_videofile('video.mp4')
+    final_video.write_videofile('video.mp4', ffmpeg_params=PARAMS)
     print('Создано video.mp4')
     vid = mpe.VideoFileClip('video.mp4')
 
-    video[4].write_videofile('preview.mp4')
+    video[4].write_videofile('preview.mp4', ffmpeg_params=PARAMS)
     print('Создано preview.mp4')
     prev = mpe.VideoFileClip('preview.mp4')
 
     concat = mpe.concatenate_videoclips([prev, vid])
     name = place + '.mp4'
-    concat.write_videofile(name)
+    concat.write_videofile(name, ffmpeg_params=PARAMS)
 
 
 def create_video(url, video_name):
     # Загрузка изображения для деления на части
+    start_time = time.time()
     im = mpe.ImageClip('Form1.png')
     regions = findObjects(im)
 
@@ -248,7 +260,9 @@ def create_video(url, video_name):
 
 
     concat = mpe.concatenate_videoclips(clips)
-    concat.write_videofile('full.mp4')
+    concat.write_videofile('full.mp4', ffmpeg_params=PARAMS)
+
+    print("--- %s seconds ---" % (time.time() - start_time))
 
 
 # compose_video('https://myanimelist.net/anime/37521/')
@@ -258,3 +272,4 @@ create_video(['https://myanimelist.net/anime/37521/',
              'Top Anime'
 
              )
+
